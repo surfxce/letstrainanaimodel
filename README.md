@@ -10,9 +10,9 @@ Zero-framework-bloat local tools built with pure Python + Apple **MLX** (`mlx-lm
 
 | File | Purpose |
 | :--- | :--- |
-| [`compare_ui.py`](compare_ui.py) | Local side-by-side comparison web app with SSE live streaming, **Keep both in RAM**, **Stream both live**, **Copy**, **Undergrad Mode**, and markdown export (**Save individual** / **Save to log**). |
+| [`compare_ui.py`](compare_ui.py) | Unified local MLX web workbench (`http://127.0.0.1:8765/`) with a top **Compare Outputs / Training Visualiser** toggle, SSE live streaming, **Keep both in RAM**, **Stream both live**, **Copy**, **Undergrad Mode**, and markdown export (**Save individual** / **Save to log**). |
 | [`train_visual.py`](train_visual.py) | Wraps `mlx_lm.lora` training and streams step-by-step per-layer/per-module LoRA weight displacement (`Delta W = B @ A`) and train/val loss to `./runs/<run_id>/`. |
-| [`visualizer.py`](visualizer.py) | Live **LoRA Parameter Space & Loss Observatory**: 3D PCA trajectory vs. the frozen Regular Model `(0, 0, 0)`, 36×7 Layer×Module heatmap, train/val loss curve (EMA + log scale), top-moving matrices, and time-scrubber replay. |
+| [`visualizer.py`](visualizer.py) | **LoRA Parameter Space & Loss Observatory** (embedded inside `compare_ui.py` or runnable standalone on port `8766`): 3D PCA trajectory vs. the frozen Regular Model `(0, 0, 0)`, 36×7 Layer×Module heatmap, Transformer Neural Network layer flow diagram, train/val loss curve (EMA + log scale), top-moving matrices, and time-scrubber replay. |
 | [`lora_config.yaml`](lora_config.yaml) | Clean default LoRA training config tuned for unified-memory Macs. |
 | [`benchmark.py`](benchmark.py) | CLI head-to-head throughput & response benchmark between two local MLX models. |
 | [`examples/sample_valid.jsonl`](examples/sample_valid.jsonl) | 3 sample chat-format prompts so `compare_ui.py` works out of the box even before you add your own dataset. |
@@ -57,12 +57,13 @@ Then open `http://127.0.0.1:8765/`.
 
 ## 2. Live LoRA Training & Parameter-Space Visualizer
 
-Open two terminals:
+Click **Training Visualiser** in the top toggle of `compare_ui.py` (`http://127.0.0.1:8765/`), or run `visualizer.py` standalone:
 
-**Terminal 1 — Start the Observatory UI**
 ```bash
+# Option A (Recommended): Open Training Visualiser inside http://127.0.0.1:8765/
+# Option B (Standalone Observatory UI):
 .venv/bin/python visualizer.py
-# Open http://127.0.0.1:8780/
+# Open http://127.0.0.1:8766/
 ```
 
 **Terminal 2 — Run a quick smoke test (no full dataset required if pointed to `./examples`) or full fine-tune**

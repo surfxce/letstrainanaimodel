@@ -25,6 +25,8 @@ import mlx.core as mx
 from mlx_lm import load, stream_generate
 from mlx_lm.sample_utils import make_sampler
 
+from visualizer import HTML_PAGE as VISUALIZER_HTML, read_run_telemetry
+
 
 HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="en">
@@ -218,6 +220,46 @@ HTML_PAGE = r"""<!DOCTYPE html>
       gap: 10px;
       padding-top: 10px;
       border-top: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .view-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      background: rgba(15, 22, 41, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 999px;
+    }
+    .view-toggle button {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+    }
+    .view-toggle button:hover:not(:disabled) {
+      color: var(--text);
+      background: rgba(148, 163, 184, 0.12);
+    }
+    .view-toggle button.active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(139, 92, 246, 0.34));
+      color: #f8fafc;
+      box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35);
+    }
+    #viz-view {
+      width: 100%;
+    }
+    #viz-frame {
+      width: 100%;
+      min-height: 1120px;
+      border: none;
+      background: transparent;
+      display: block;
     }
     .controls {
       display: flex;
@@ -458,14 +500,20 @@ HTML_PAGE = r"""<!DOCTYPE html>
   <div class="wrap">
     <header>
       <div>
-        <h1>MLX Side-by-Side Comparison</h1>
+        <h1>MLX AI Workbench</h1>
         <div class="sub" id="subtitle">Loading configuration...</div>
+      </div>
+      <div class="view-toggle" role="tablist" aria-label="Workspace View">
+        <button type="button" id="tab-arena" class="active" role="tab" aria-selected="true">Compare Outputs</button>
+        <button type="button" id="tab-viz" role="tab" aria-selected="false">Training Visualiser</button>
       </div>
       <div class="row">
         <button type="button" class="guide-btn" id="guide-open-btn">Guide</button>
         <span class="badge" id="global-status">Idle</span>
       </div>
     </header>
+
+    <div id="arena-view">
 
     <section class="card controls">
       <div class="row">
@@ -560,6 +608,11 @@ HTML_PAGE = r"""<!DOCTYPE html>
         <div class="output" id="right-output"></div>
       </div>
     </section>
+    </div>
+
+    <div id="viz-view" style="display:none;">
+      <iframe id="viz-frame" title="LoRA Parameter Space &amp; Loss Observatory"></iframe>
+    </div>
   </div>
 
   <script>
@@ -839,6 +892,65 @@ HTML_PAGE = r"""<!DOCTYPE html>
       openOnboarding();
     }
 
+    const tabArena = document.getElementById("tab-arena");
+    const tabViz = document.getElementById("tab-viz");
+    const arenaView = document.getElementById("arena-view");
+    const vizView = document.getElementById("viz-view");
+    const vizFrame = document.getElementById("viz-frame");
+    const VIEW_KEY = "mlx_workbench_view_v1";
+    let vizLoaded = false;
+
+    function switchMode(mode) {
+      const showViz = mode === "viz";
+      tabArena.classList.toggle("active", !showViz);
+      tabArena.setAttribute("aria-selected", String(!showViz));
+      tabViz.classList.toggle("active", showViz);
+      tabViz.setAttribute("aria-selected", String(showViz));
+      arenaView.style.display = showViz ? "none" : "block";
+      vizView.style.display = showViz ? "block" : "none";
+      document.title = showViz ? "Training Visualiser — MLX Workbench" : "Compare Outputs — MLX Workbench";
+      try {
+        localStorage.setItem(VIEW_KEY, mode);
+      } catch {}
+      if (showViz) {
+        if (!vizLoaded) {
+          vizFrame.src = "/visualizer?embed=1";
+          vizLoaded = true;
+        } else {
+          try {
+            if (vizFrame.contentWindow && typeof vizFrame.contentWindow.renderAll === "function") {
+              vizFrame.contentWindow.renderAll();
+            }
+          } catch {}
+        }
+      }
+    }
+
+    tabArena.addEventListener("click", () => {
+      history.replaceState(null, "", "#compare");
+      switchMode("arena");
+    });
+    tabViz.addEventListener("click", () => {
+      history.replaceState(null, "", "#visualiser");
+      switchMode("viz");
+    });
+    window.addEventListener("message", (ev) => {
+      if (ev.data && ev.data.type === "viz-height" && typeof ev.data.height === "number") {
+        vizFrame.style.height = Math.max(960, Math.ceil(ev.data.height) + 12) + "px";
+      }
+    });
+
+    const initialHash = window.location.hash;
+    let initialView = "arena";
+    if (initialHash === "#visualiser") initialView = "viz";
+    else if (initialHash === "#compare") initialView = "arena";
+    else {
+      try {
+        if (localStorage.getItem(VIEW_KEY) === "viz") initialView = "viz";
+      } catch {}
+    }
+    if (initialView === "viz") switchMode("viz");
+
     init();
   </script>
 </body>
@@ -1026,6 +1138,7 @@ def make_handler(
     manager: ModelManager,
     config_payload: dict[str, Any],
     samples: list[dict[str, str]],
+    runs_dir: Path = Path("./runs"),
 ) -> type[BaseHTTPRequestHandler]:
     class ArenaHandler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:
@@ -1053,6 +1166,21 @@ def make_handler(
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+                return
+
+            if parsed.path == "/visualizer":
+                body = VISUALIZER_HTML.encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if parsed.path == "/api/telemetry":
+                qs = parse_qs(parsed.query)
+                req_run = qs.get("run", [None])[0]
+                self._send_json(read_run_telemetry(runs_dir, req_run))
                 return
 
             if parsed.path == "/api/config":
@@ -1212,6 +1340,7 @@ def parse_args() -> argparse.Namespace:
         help="Path to JSONL prompts file (defaults to ./data/valid.jsonl or ./examples/sample_valid.jsonl if present).",
     )
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--runs-dir", default="./runs", help="Directory containing live LoRA training telemetry.")
     parser.add_argument(
         "--simultaneous",
         action="store_true",
@@ -1237,7 +1366,10 @@ def main() -> None:
         "sample_count": len(samples),
         "simultaneous": args.simultaneous,
     }
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(manager, config_payload, samples))
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", args.port),
+        make_handler(manager, config_payload, samples, Path(args.runs_dir)),
+    )
     server.daemon_threads = True
     print(f"Side-by-side comparison UI running at http://127.0.0.1:{args.port}")
     print(f"Loaded {len(samples)} validation samples from {args.prompts}")

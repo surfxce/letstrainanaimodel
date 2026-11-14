@@ -51,6 +51,19 @@ HTML_PAGE = r"""<!DOCTYPE html>
       line-height: 1.45;
       overflow-x: hidden;
     }
+    body.embedded {
+      background: transparent;
+    }
+    body.embedded .bg-aurora {
+      display: none;
+    }
+    body.embedded .wrap {
+      padding-top: 4px;
+      padding-bottom: 24px;
+    }
+    body.embedded header {
+      margin-bottom: 10px;
+    }
     .bg-aurora {
       position: fixed;
       inset: -18%;
@@ -388,6 +401,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
     #space-canvas:active { cursor: grabbing; }
     #loss-canvas { height: 420px; }
     #heat-canvas { height: 320px; }
+    #nn-canvas { height: 310px; }
     .tooltip {
       position: fixed;
       pointer-events: none;
@@ -625,6 +639,19 @@ HTML_PAGE = r"""<!DOCTYPE html>
         <div class="bar-list" id="top-bars"></div>
       </div>
     </section>
+
+    <section class="card" style="margin-bottom: 14px;">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Transformer Neural Network Layers (Live Weight Shift Flow)</div>
+          <div class="card-sub">Input Tokens &rarr; Embedding &rarr; All Transformer Blocks (Self-Attention Q/K/V/O + MLP Gate/Up/Down) &rarr; LM Head &bull; Hover a layer to inspect</div>
+        </div>
+        <div class="checks">
+          <span class="sub" style="font-size:0.75rem;">Top band: Attention &bull; Bottom band: MLP</span>
+        </div>
+      </div>
+      <canvas id="nn-canvas"></canvas>
+    </section>
   </div>
 
   <div class="tooltip" id="tooltip"></div>
@@ -641,6 +668,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
     const spaceCanvas = document.getElementById("space-canvas");
     const lossCanvas = document.getElementById("loss-canvas");
     const heatCanvas = document.getElementById("heat-canvas");
+    const nnCanvas = document.getElementById("nn-canvas");
+    const isEmbedded = new URLSearchParams(window.location.search).get("embed") === "1";
+    if (isEmbedded) document.body.classList.add("embedded");
 
     let state = {
       runs: [],
@@ -662,6 +692,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
       heatCells: [],
       lossPoints: [],
       layerDots: [],
+      nnNodes: [],
     };
 
     function showTooltip(x, y, text) {
@@ -1157,11 +1188,183 @@ HTML_PAGE = r"""<!DOCTYPE html>
       }).join("");
     }
 
+    function renderNeuralNet() {
+      const { ctx, w, h } = sizeCanvas(nnCanvas);
+      ctx.clearRect(0, 0, w, h);
+      state.nnNodes = [];
+
+      const snap = state.snapshots[state.selectedIdx];
+      const mods = snap?.param_space?.modules || [];
+      const useRel = document.getElementById("chk-rel").checked;
+
+      const byLayer = new Map();
+      mods.forEach(m => {
+        if (m.layer < 0) return;
+        if (!byLayer.has(m.layer)) {
+          byLayer.set(m.layer, { attn: 0, mlp: 0, mods: [], topMod: null, topVal: -1 });
+        }
+        const entry = byLayer.get(m.layer);
+        const val = useRel ? m.rel_pct : m.delta_norm;
+        if (m.group === "attn") entry.attn += val;
+        else entry.mlp += val;
+        entry.mods.push(m);
+        if (val > entry.topVal) {
+          entry.topVal = val;
+          entry.topMod = m;
+        }
+      });
+
+      const layerNums = byLayer.size
+        ? [...byLayer.keys()].sort((a, b) => a - b)
+        : Array.from({ length: 36 }, (_, i) => i);
+
+      let maxGroupVal = 1e-7;
+      layerNums.forEach(l => {
+        const e = byLayer.get(l);
+        if (e) maxGroupVal = Math.max(maxGroupVal, e.attn, e.mlp);
+      });
+
+      const pad = { l: 74, r: 74, t: 44, b: 40 };
+      const usableW = Math.max(200, w - pad.l - pad.r);
+      const midY = (pad.t + (h - pad.b)) * 0.52;
+      const attnY = midY - 64;
+      const mlpY = midY + 14;
+      const boxH = 48;
+
+      // Input & Output endpoint pills
+      function drawEndpoint(x, label, sub) {
+        const ew = 54, eh = 96;
+        const ey = midY - eh / 2;
+        ctx.fillStyle = "rgba(30, 41, 59, 0.86)";
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(x - ew / 2, ey, ew, eh, 10);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#e2e8f0";
+        ctx.font = "600 11px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(label, x, midY - 4);
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "10px ui-monospace, monospace";
+        ctx.fillText(sub, x, midY + 14);
+        ctx.textAlign = "left";
+      }
+
+      const stepX = usableW / Math.max(1, layerNums.length);
+      const boxW = Math.max(6, Math.min(26, stepX * 0.72));
+
+      // Residual spine connecting Embed -> L0..LN -> LM Head
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.22)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(40 + 27, midY);
+      ctx.lineTo(w - 40 - 27, midY);
+      ctx.stroke();
+
+      drawEndpoint(38, "Tokens", "Embed");
+      drawEndpoint(w - 38, "Logits", "LM Head");
+
+      layerNums.forEach((lyr, idx) => {
+        const cx = pad.l + (idx + 0.5) * stepX;
+        const x0 = cx - boxW / 2;
+        const info = byLayer.get(lyr);
+        const attnRatio = info ? Math.min(1, info.attn / maxGroupVal) : 0;
+        const mlpRatio = info ? Math.min(1, info.mlp / maxGroupVal) : 0;
+        const combined = Math.max(attnRatio, mlpRatio);
+
+        // Inter-layer flow lines (Attn -> MLP vertical link + residual arc)
+        ctx.strokeStyle = info
+          ? `rgba(125, 211, 252, ${0.14 + 0.55 * combined})`
+          : "rgba(100, 116, 139, 0.16)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx, attnY + boxH);
+        ctx.lineTo(cx, mlpY);
+        ctx.stroke();
+
+        // Attention node (top band)
+        ctx.fillStyle = info
+          ? `rgba(${Math.round(30 + 26 * attnRatio)}, ${Math.round(58 + 131 * attnRatio)}, ${Math.round(138 + 110 * attnRatio)}, ${0.34 + 0.62 * attnRatio})`
+          : "rgba(30, 41, 59, 0.45)";
+        ctx.strokeStyle = info && attnRatio > 0.45 ? "rgba(56, 189, 248, 0.9)" : "rgba(96, 165, 250, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(x0, attnY, boxW, boxH, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        // MLP node (bottom band)
+        ctx.fillStyle = info
+          ? `rgba(${Math.round(16 + 151 * mlpRatio * 0.55)}, ${Math.round(78 + 133 * mlpRatio)}, ${Math.round(92 + 90 * mlpRatio)}, ${0.34 + 0.62 * mlpRatio})`
+          : "rgba(30, 41, 59, 0.45)";
+        ctx.strokeStyle = info && mlpRatio > 0.45 ? "rgba(52, 211, 153, 0.9)" : "rgba(167, 139, 250, 0.35)";
+        ctx.beginPath();
+        ctx.roundRect(x0, mlpY, boxW, boxH, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        // Glow halo on top movers
+        if (info && combined > 0.65) {
+          const rg = ctx.createRadialGradient(cx, midY, 1, cx, midY, Math.max(18, boxW * 1.4));
+          rg.addColorStop(0, "rgba(56, 189, 248, 0.22)");
+          rg.addColorStop(1, "rgba(56, 189, 248, 0)");
+          ctx.fillStyle = rg;
+          ctx.beginPath();
+          ctx.arc(cx, midY, Math.max(18, boxW * 1.4), 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (lyr % 5 === 0 || lyr === layerNums[layerNums.length - 1] || boxW >= 18) {
+          ctx.fillStyle = "#94a3b8";
+          ctx.font = "10px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("L" + lyr, cx, h - 14);
+          ctx.textAlign = "left";
+        }
+
+        state.nnNodes.push({
+          x: x0 - 2,
+          y: attnY - 4,
+          w: boxW + 4,
+          h: mlpY + boxH - attnY + 8,
+          layer: lyr,
+          info,
+        });
+      });
+
+      // Row subtitles + blueprint hint
+      ctx.font = "600 11px -apple-system, sans-serif";
+      ctx.fillStyle = "#7dd3fc";
+      ctx.fillText("Self-Attention (Q · K · V · O)", pad.l, attnY - 12);
+      ctx.fillStyle = "#6ee7b7";
+      ctx.fillText("Feed-Forward MLP (Gate · Up · Down)", pad.l, mlpY + boxH + 18);
+
+      if (!mods.length) {
+        ctx.fillStyle = "rgba(186, 230, 253, 0.85)";
+        ctx.font = "600 12px -apple-system, sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText("Architecture Blueprint · Run train_visual.py to watch live layer shifts", w - pad.r, 24);
+        ctx.textAlign = "left";
+      }
+    }
+
+    function notifyEmbedHeight() {
+      if (!isEmbedded) return;
+      try {
+        const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        window.parent.postMessage({ type: "viz-height", height: h }, "*");
+      } catch {}
+    }
+
     function renderAll() {
       updateKPIs();
       renderSpace();
       renderLoss();
       renderHeatmapAndBars();
+      renderNeuralNet();
+      notifyEmbedHeight();
     }
 
     // 3D Orbit & Zoom controls
@@ -1238,6 +1441,29 @@ HTML_PAGE = r"""<!DOCTYPE html>
       }
     });
     lossCanvas.addEventListener("mouseleave", hideTooltip);
+
+    nnCanvas.addEventListener("mousemove", (e) => {
+      const rect = nnCanvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const hit = state.nnNodes.find(n => mx >= n.x && mx <= n.x + n.w && my >= n.y && my <= n.y + n.h);
+      if (hit) {
+        if (hit.info) {
+          const top = hit.info.topMod;
+          const unit = document.getElementById("chk-rel").checked ? "%" : "";
+          const topTxt = top ? `\nTop matrix: ${top.proj} (${hit.info.topVal.toFixed(4)}${unit})` : "";
+          showTooltip(
+            e.clientX,
+            e.clientY,
+            `Transformer Layer ${hit.layer}\nAttn (Q/K/V/O) sum: ${hit.info.attn.toFixed(4)}${unit}\nMLP (Gate/Up/Down) sum: ${hit.info.mlp.toFixed(4)}${unit}${topTxt}`
+          );
+        } else {
+          showTooltip(e.clientX, e.clientY, `Transformer Layer ${hit.layer}\nWaiting for training telemetry...`);
+        }
+      } else {
+        hideTooltip();
+      }
+    });
+    nnCanvas.addEventListener("mouseleave", hideTooltip);
 
     // UI toggles & scrubber
     stepSlider.addEventListener("input", () => {
@@ -1320,11 +1546,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
       if (e.key === "Escape" && onboardBackdrop.classList.contains("open")) closeOnboarding();
     });
     try {
-      if (!localStorage.getItem(ONBOARD_KEY)) openOnboarding();
+      if (!isEmbedded && !localStorage.getItem(ONBOARD_KEY)) openOnboarding();
     } catch {
-      openOnboarding();
+      if (!isEmbedded) openOnboarding();
     }
 
+    window.renderAll = renderAll;
     window.addEventListener("resize", renderAll);
     fetchTelemetry();
     requestAnimationFrame(animLoop);
