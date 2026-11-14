@@ -1,0 +1,19 @@
+# Python / macOS / Editor
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+
+# Local weights, datasets, training runs, and logs
+models/
+data/
+raw_datasets/
+dupfind/
+runs/
+adapters/
+adapters_*/
+saved_comparisons/
+benchmark_results/
+*.safetensors
+*.npz
