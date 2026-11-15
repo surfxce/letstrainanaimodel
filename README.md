@@ -2,7 +2,7 @@
 
 Zero-framework-bloat local tools built with pure Python + Apple **MLX** (`mlx-lm`) for comparing local models side-by-side and watching LoRA fine-tuning happen live in parameter space and loss curves.
 
-> No React/Node build step required — each UI is a self-contained local HTTP server with an animated dark aurora interface and built-in onboarding guide.
+> No React/Node build step required — each UI is a self-contained local HTTP server with an illustrated tropical pond glass interface, playful animations, and a built-in onboarding guide.
 
 ---
 

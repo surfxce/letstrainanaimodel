@@ -35,64 +35,118 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MLX Side-by-Side Model Arena</title>
+  <title>MLX AI Workbench — Pond Edition</title>
   <style>
     :root {
-      --bg: #0b0e14;
-      --panel: #121722;
-      --panel-2: #181f2e;
-      --border: #252f45;
-      --text: #e6ecf5;
-      --muted: #8b98b0;
-      --accent: #60a5fa;
-      --accent-2: #34d399;
-      --warn: #fbbf24;
-      --danger: #f87171;
+      --bg: #bae4e6;
+      --panel: rgba(248, 254, 254, 0.82);
+      --panel-2: rgba(232, 248, 248, 0.90);
+      --border: rgba(25, 84, 88, 0.22);
+      --ink-border: rgba(22, 66, 68, 0.30);
+      --text: #163638;
+      --muted: #477174;
+      --accent: #0891b2;
+      --accent-2: #15803d;
+      --koi: #f97316;
+      --warn: #d97706;
+      --danger: #e11d48;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      background: #070a14;
+      background: linear-gradient(155deg, #cbeeea 0%, #aadce2 46%, #b8e7dc 100%);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       line-height: 1.5;
       overflow-x: hidden;
     }
-    .bg-aurora {
+    .bg-tropical {
       position: fixed;
-      inset: -18%;
+      inset: 0;
       z-index: 0;
       pointer-events: none;
+      overflow: hidden;
+    }
+    .caustic-layer {
+      position: absolute;
+      inset: -14%;
       background:
-        radial-gradient(46% 42% at 22% 24%, rgba(56, 189, 248, 0.24), transparent 70%),
-        radial-gradient(44% 44% at 78% 20%, rgba(139, 92, 246, 0.26), transparent 70%),
-        radial-gradient(48% 44% at 58% 82%, rgba(59, 130, 246, 0.22), transparent 72%),
-        radial-gradient(38% 36% at 16% 80%, rgba(168, 85, 247, 0.18), transparent 70%);
-      filter: blur(42px) saturate(1.18);
-      animation: auroraDrift 20s ease-in-out infinite alternate;
+        radial-gradient(42% 38% at 18% 22%, rgba(255, 255, 255, 0.55), transparent 70%),
+        radial-gradient(40% 40% at 82% 18%, rgba(110, 231, 183, 0.38), transparent 70%),
+        radial-gradient(46% 42% at 55% 85%, rgba(56, 189, 248, 0.28), transparent 72%),
+        radial-gradient(34% 34% at 15% 82%, rgba(253, 186, 116, 0.24), transparent 70%);
+      filter: blur(34px);
+      animation: lagoonSway 18s ease-in-out infinite alternate;
       will-change: transform;
     }
-    .bg-aurora::after {
-      content: "";
+    .corner-lily {
       position: absolute;
-      inset: 8%;
-      background:
-        radial-gradient(36% 36% at 68% 34%, rgba(34, 211, 238, 0.16), transparent 68%),
-        radial-gradient(40% 38% at 30% 68%, rgba(124, 58, 237, 0.18), transparent 68%);
-      animation: auroraCounter 26s ease-in-out infinite alternate;
+      opacity: 0.48;
+      transform-origin: bottom center;
+      filter: drop-shadow(0 6px 14px rgba(22, 54, 56, 0.10));
     }
-    @keyframes auroraDrift {
-      0% { transform: translate3d(-2%, -1.5%, 0) scale(1) rotate(0deg); }
-      50% { transform: translate3d(2.5%, 1.5%, 0) scale(1.06) rotate(3deg); }
-      100% { transform: translate3d(-1.5%, 2.5%, 0) scale(1.03) rotate(-2deg); }
+    .corner-lily.left {
+      left: -28px;
+      bottom: -24px;
+      width: 240px;
+      animation: leafSway 7.5s ease-in-out infinite alternate;
     }
-    @keyframes auroraCounter {
-      0% { transform: translate3d(2%, 1%, 0) scale(1.02); }
-      100% { transform: translate3d(-3%, -2%, 0) scale(1.08); }
+    .corner-lily.right {
+      right: -24px;
+      bottom: -28px;
+      width: 220px;
+      animation: leafSwayReverse 8.5s ease-in-out infinite alternate;
+    }
+    .bubble {
+      position: absolute;
+      bottom: -40px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(165, 243, 252, 0.35) 60%, rgba(255, 255, 255, 0.65));
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      box-shadow: 0 2px 8px rgba(14, 116, 144, 0.12);
+      animation: bubbleRise linear infinite;
+    }
+    .sparkle {
+      position: absolute;
+      color: #ffffff;
+      font-size: 15px;
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+      animation: sparkleTwinkle 3.4s ease-in-out infinite;
+    }
+    @keyframes lagoonSway {
+      0% { transform: translate3d(-2%, -1%, 0) scale(1); }
+      100% { transform: translate3d(2.5%, 2%, 0) scale(1.06); }
+    }
+    @keyframes leafSway {
+      0% { transform: rotate(-2.5deg) translateY(0); }
+      100% { transform: rotate(2.5deg) translateY(-6px); }
+    }
+    @keyframes leafSwayReverse {
+      0% { transform: rotate(2deg) translateY(0); }
+      100% { transform: rotate(-3deg) translateY(-5px); }
+    }
+    @keyframes bubbleRise {
+      0% { transform: translateY(0) translateX(0) scale(0.85); opacity: 0; }
+      12% { opacity: 0.78; }
+      50% { transform: translateY(-48vh) translateX(10px) scale(1); opacity: 0.7; }
+      88% { opacity: 0.55; }
+      100% { transform: translateY(-108vh) translateX(-8px) scale(1.1); opacity: 0; }
+    }
+    @keyframes sparkleTwinkle {
+      0%, 100% { opacity: 0.25; transform: scale(0.7) rotate(0deg); }
+      50% { opacity: 0.95; transform: scale(1.2) rotate(22deg); }
+    }
+    @keyframes frogBob {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-3px) rotate(-2deg); }
+    }
+    @keyframes ripplePulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.35); }
+      50% { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .bg-aurora, .bg-aurora::after { animation: none; }
+      .caustic-layer, .corner-lily, .bubble, .sparkle, .brand-frog { animation: none; }
     }
     .wrap {
       position: relative;
@@ -109,38 +163,61 @@ HTML_PAGE = r"""<!DOCTYPE html>
       gap: 12px;
       margin-bottom: 14px;
     }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-frog {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      animation: frogBob 3.6s ease-in-out infinite;
+      filter: drop-shadow(0 3px 6px rgba(22, 54, 56, 0.16));
+    }
     h1 {
-      font-size: 1.25rem;
+      font-size: 1.32rem;
       margin: 0;
-      font-weight: 650;
-      letter-spacing: -0.01em;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+      color: #123133;
     }
     .sub {
       color: var(--muted);
       font-size: 0.85rem;
     }
     .card {
-      background: rgba(17, 23, 39, 0.76);
+      background: var(--panel);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      border-radius: 12px;
-      padding: 14px;
-      box-shadow: 0 12px 34px rgba(2, 6, 23, 0.42);
+      border: 1.5px solid rgba(255, 255, 255, 0.85);
+      border-radius: 18px;
+      padding: 15px;
+      box-shadow:
+        0 10px 28px rgba(17, 75, 82, 0.10),
+        inset 0 1px 0 rgba(255, 255, 255, 0.95),
+        0 0 0 1px rgba(24, 78, 82, 0.12);
+      transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s ease;
+    }
+    .card:hover {
+      box-shadow:
+        0 14px 34px rgba(17, 75, 82, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 1),
+        0 0 0 1px rgba(16, 185, 129, 0.26);
     }
     .guide-btn {
-      background: rgba(56, 189, 248, 0.12);
-      color: #bae6fd;
-      border: 1px solid rgba(56, 189, 248, 0.34);
+      background: rgba(255, 255, 255, 0.72);
+      color: #0e7490;
+      border: 1.5px solid rgba(8, 145, 178, 0.35);
       font-size: 0.8rem;
-      padding: 6px 12px;
+      padding: 6px 13px;
     }
-    .guide-btn:hover { background: rgba(56, 189, 248, 0.22); }
+    .guide-btn:hover { background: #ffffff; }
     .onboard-backdrop {
       position: fixed;
       inset: 0;
       z-index: 100;
-      background: rgba(5, 8, 18, 0.76);
+      background: rgba(20, 62, 68, 0.42);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       display: none;
@@ -153,11 +230,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
       width: min(760px, 100%);
       max-height: 90vh;
       overflow-y: auto;
-      background: linear-gradient(155deg, rgba(16, 23, 42, 0.96), rgba(22, 18, 46, 0.95));
-      border: 1px solid rgba(139, 92, 246, 0.38);
-      border-radius: 16px;
+      background: linear-gradient(155deg, rgba(248, 254, 254, 0.96), rgba(226, 247, 243, 0.96));
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: 22px;
       padding: 22px 24px;
-      box-shadow: 0 24px 70px rgba(2, 6, 23, 0.75), 0 0 40px rgba(56, 189, 248, 0.12);
+      color: var(--text);
+      box-shadow: 0 24px 60px rgba(14, 68, 74, 0.26), 0 0 0 1px rgba(25, 84, 88, 0.18);
     }
     .onboard-head {
       display: flex;
@@ -169,12 +247,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
     .onboard-kicker {
       display: inline-block;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 750;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #7dd3fc;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.28);
+      color: #0f766e;
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.34);
       border-radius: 999px;
       padding: 3px 10px;
       margin-bottom: 8px;
@@ -182,10 +260,11 @@ HTML_PAGE = r"""<!DOCTYPE html>
     .onboard-modal h2 {
       margin: 0;
       font-size: 21px;
+      color: #123133;
       letter-spacing: -0.015em;
     }
     .onboard-lead {
-      color: #cbd5e1;
+      color: #365f62;
       font-size: 13.5px;
       margin: 6px 0 16px;
     }
@@ -199,15 +278,15 @@ HTML_PAGE = r"""<!DOCTYPE html>
       .onboard-grid { grid-template-columns: 1fr; }
     }
     .onboard-step {
-      background: rgba(11, 16, 30, 0.72);
-      border: 1px solid rgba(148, 163, 184, 0.16);
-      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(25, 84, 88, 0.16);
+      border-radius: 14px;
       padding: 12px;
     }
     .onboard-step h3 {
       margin: 0 0 4px;
       font-size: 13.5px;
-      color: #e0f2fe;
+      color: #0f766e;
     }
     .onboard-step p {
       margin: 0;
@@ -221,37 +300,39 @@ HTML_PAGE = r"""<!DOCTYPE html>
       flex-wrap: wrap;
       gap: 10px;
       padding-top: 10px;
-      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      border-top: 1px solid rgba(25, 84, 88, 0.14);
     }
     .view-toggle {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       padding: 4px;
-      background: rgba(15, 22, 41, 0.78);
+      background: rgba(255, 255, 255, 0.68);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(148, 163, 184, 0.24);
+      border: 1.5px solid rgba(255, 255, 255, 0.92);
       border-radius: 999px;
+      box-shadow: 0 4px 16px rgba(17, 75, 82, 0.10);
     }
     .view-toggle button {
       border: none;
       background: transparent;
       color: var(--muted);
       border-radius: 999px;
-      padding: 6px 14px;
-      font-size: 0.84rem;
-      font-weight: 600;
-      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+      padding: 7px 16px;
+      font-size: 0.85rem;
+      font-weight: 650;
+      transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     .view-toggle button:hover:not(:disabled) {
       color: var(--text);
-      background: rgba(148, 163, 184, 0.12);
+      background: rgba(255, 255, 255, 0.65);
+      transform: translateY(-1px);
     }
     .view-toggle button.active {
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(139, 92, 246, 0.34));
-      color: #f8fafc;
-      box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35);
+      background: linear-gradient(135deg, #22c55e, #06b6d4);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.28);
     }
     #viz-view {
       width: 100%;
@@ -304,27 +385,34 @@ HTML_PAGE = r"""<!DOCTYPE html>
       color: var(--muted);
     }
     button {
-      background: var(--panel-2);
+      background: rgba(255, 255, 255, 0.78);
       color: var(--text);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 11px;
       padding: 7px 13px;
       font-size: 0.88rem;
-      font-weight: 550;
+      font-weight: 600;
       cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s, background 0.15s, box-shadow 0.18s;
     }
     button:hover:not(:disabled) {
       border-color: var(--accent);
-      background: #1d2638;
+      background: #ffffff;
+      transform: translateY(-1.5px);
+      box-shadow: 0 4px 12px rgba(8, 145, 178, 0.14);
+    }
+    button:active:not(:disabled) {
+      transform: translateY(0) scale(0.98);
     }
     button.primary {
-      background: #2563eb;
-      border-color: #3b82f6;
-      color: #fff;
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      border-color: transparent;
+      color: #ffffff;
+      box-shadow: 0 5px 16px rgba(16, 185, 129, 0.28);
     }
     button.primary:hover:not(:disabled) {
-      background: #1d4ed8;
+      background: linear-gradient(135deg, #059669, #0891b2);
+      box-shadow: 0 7px 20px rgba(8, 145, 178, 0.34);
     }
     button:disabled {
       opacity: 0.55;
@@ -372,16 +460,17 @@ HTML_PAGE = r"""<!DOCTYPE html>
     .badge {
       display: inline-block;
       font-size: 0.75rem;
-      padding: 2px 8px;
+      font-weight: 600;
+      padding: 3px 10px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: var(--panel-2);
+      background: rgba(255, 255, 255, 0.78);
       color: var(--muted);
       white-space: nowrap;
     }
-    .badge.running { border-color: var(--warn); color: var(--warn); }
-    .badge.done { border-color: var(--accent-2); color: var(--accent-2); }
-    .badge.err { border-color: var(--danger); color: var(--danger); }
+    .badge.running { border-color: var(--koi); color: #c2410c; background: rgba(255, 237, 213, 0.9); animation: ripplePulse 1.6s ease-in-out infinite; }
+    .badge.done { border-color: #22c55e; color: #15803d; background: rgba(220, 252, 231, 0.92); }
+    .badge.err { border-color: var(--danger); color: #be123c; background: rgba(255, 228, 230, 0.92); }
     .metrics {
       display: flex;
       flex-wrap: wrap;
@@ -422,13 +511,14 @@ HTML_PAGE = r"""<!DOCTYPE html>
       align-items: center;
       gap: 8px;
       margin-bottom: 10px;
-      padding: 6px 8px;
-      background: rgba(15, 22, 41, 0.7);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      border-radius: 8px;
+      padding: 6px 10px;
+      background: rgba(224, 247, 246, 0.85);
+      border: 1px solid rgba(25, 84, 88, 0.16);
+      border-radius: 12px;
     }
     .ckpt-row label {
       font-size: 0.74rem;
+      font-weight: 700;
       color: var(--muted);
       white-space: nowrap;
       text-transform: uppercase;
@@ -442,9 +532,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
     }
     .ckpt-progress {
       width: 68px;
-      height: 7px;
+      height: 8px;
       border-radius: 999px;
-      background: rgba(148, 163, 184, 0.16);
+      background: rgba(25, 84, 88, 0.12);
       overflow: hidden;
       flex-shrink: 0;
     }
@@ -452,13 +542,14 @@ HTML_PAGE = r"""<!DOCTYPE html>
       height: 100%;
       width: 0%;
       border-radius: 999px;
-      background: linear-gradient(90deg, #38bdf8, #a78bfa, #34d399);
-      transition: width 0.2s ease;
+      background: linear-gradient(90deg, #fb923c, #34d399, #0ea5e9);
+      transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     .ckpt-pct {
       font-size: 0.74rem;
+      font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: #cbd5e1;
+      color: #164e63;
       min-width: 34px;
       text-align: right;
     }
@@ -500,14 +591,42 @@ HTML_PAGE = r"""<!DOCTYPE html>
       margin-top: 8px;
       white-space: pre-wrap;
       font-size: 0.88rem;
-      color: #cbd5e1;
+      color: var(--text);
       border-top: 1px solid var(--border);
       padding-top: 8px;
     }
   </style>
 </head>
 <body>
-  <div class="bg-aurora" aria-hidden="true"></div>
+  <div class="bg-tropical" aria-hidden="true">
+    <div class="caustic-layer"></div>
+    <svg class="corner-lily left" viewBox="0 0 220 200" fill="none">
+      <path d="M52 195 C64 135, 86 92, 118 58" stroke="#1f514c" stroke-width="3.2" stroke-linecap="round"/>
+      <path d="M98 195 C108 150, 128 118, 152 94" stroke="#1f514c" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M122 24 C162 24, 192 52, 188 86 C184 114, 152 132, 118 128 C82 124, 52 98, 56 64 C59 38, 84 24, 116 24 L122 68 Z" fill="#52b16b" stroke="#1f514c" stroke-width="3"/>
+      <path d="M122 68 L168 48 M122 68 L172 86 M122 68 L128 118 M122 68 L74 88 M122 68 L84 44" stroke="#9be08e" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="152" cy="54" r="6" fill="#e0f7fa" stroke="#1f514c" stroke-width="2"/>
+      <path d="M158 92 C186 92, 206 112, 202 136 C198 158, 174 170, 148 166 C122 162, 106 142, 110 120 C114 102, 134 92, 154 92 L156 126 Z" fill="#6ec97a" stroke="#1f514c" stroke-width="2.6"/>
+      <circle cx="182" cy="122" r="4.5" fill="#ffffff" stroke="#1f514c" stroke-width="1.8"/>
+    </svg>
+    <svg class="corner-lily right" viewBox="0 0 220 200" fill="none">
+      <path d="M162 195 C150 140, 130 98, 96 64" stroke="#1f514c" stroke-width="3.2" stroke-linecap="round"/>
+      <path d="M98 30 C138 30, 168 58, 164 92 C160 120, 128 138, 94 134 C58 130, 28 104, 32 70 C35 44, 60 30, 92 30 L98 74 Z" fill="#5dbb72" stroke="#1f514c" stroke-width="3"/>
+      <path d="M98 74 L144 54 M98 74 L148 92 M98 74 L104 124 M98 74 L50 94" stroke="#a7e69b" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="64" cy="76" r="5" fill="#e0f7fa" stroke="#1f514c" stroke-width="1.8"/>
+    </svg>
+    <div class="bubble" style="left:8%;width:14px;height:14px;animation-duration:11s;animation-delay:0s;"></div>
+    <div class="bubble" style="left:19%;width:9px;height:9px;animation-duration:8.5s;animation-delay:2.2s;"></div>
+    <div class="bubble" style="left:33%;width:16px;height:16px;animation-duration:13s;animation-delay:4s;"></div>
+    <div class="bubble" style="left:52%;width:10px;height:10px;animation-duration:9.5s;animation-delay:1.1s;"></div>
+    <div class="bubble" style="left:67%;width:15px;height:15px;animation-duration:12s;animation-delay:3.5s;"></div>
+    <div class="bubble" style="left:81%;width:8px;height:8px;animation-duration:7.8s;animation-delay:0.8s;"></div>
+    <div class="bubble" style="left:92%;width:13px;height:13px;animation-duration:10.8s;animation-delay:5s;"></div>
+    <span class="sparkle" style="left:14%;top:18%;animation-delay:0.2s;">✦</span>
+    <span class="sparkle" style="left:85%;top:24%;animation-delay:1.4s;">✦</span>
+    <span class="sparkle" style="left:44%;top:11%;animation-delay:2.1s;">✦</span>
+    <span class="sparkle" style="left:72%;top:62%;animation-delay:0.9s;">✦</span>
+  </div>
   <div class="onboard-backdrop" id="onboard-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="onboard-modal">
       <div class="onboard-head">
@@ -546,9 +665,22 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </div>
   <div class="wrap">
     <header>
-      <div>
-        <h1>MLX AI Workbench</h1>
-        <div class="sub" id="subtitle">Loading configuration...</div>
+      <div class="brand-row">
+        <svg class="brand-frog" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <ellipse cx="32" cy="48" rx="26" ry="9" fill="#52b16b" stroke="#163638" stroke-width="2.4"/>
+          <path d="M32 48 L56 44" stroke="#a7e69b" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="24" cy="24" r="6.5" fill="#7be078" stroke="#163638" stroke-width="2.2"/>
+          <circle cx="40" cy="24" r="6.5" fill="#7be078" stroke="#163638" stroke-width="2.2"/>
+          <ellipse cx="32" cy="36" rx="14" ry="11" fill="#7be078" stroke="#163638" stroke-width="2.4"/>
+          <ellipse cx="32" cy="40" rx="9" ry="5.5" fill="#dcfce7"/>
+          <circle cx="24" cy="24" r="2.2" fill="#163638"/>
+          <circle cx="40" cy="24" r="2.2" fill="#163638"/>
+          <path d="M28 33 Q32 36 36 33" stroke="#163638" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <h1>MLX AI Workbench</h1>
+          <div class="sub" id="subtitle">Loading configuration...</div>
+        </div>
       </div>
       <div class="view-toggle" role="tablist" aria-label="Workspace View">
         <button type="button" id="tab-arena" class="active" role="tab" aria-selected="true">Compare Outputs</button>

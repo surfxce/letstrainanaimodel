@@ -28,24 +28,24 @@ HTML_PAGE = r"""<!DOCTYPE html>
   <title>LoRA Parameter Space & Loss Observatory</title>
   <style>
     :root {
-      --bg: #060911;
-      --bg2: #0c1220;
-      --panel: rgba(15, 22, 38, 0.92);
-      --panel2: rgba(21, 31, 52, 0.92);
-      --border: #1e2d4a;
-      --text: #e6edf8;
-      --muted: #8496b8;
-      --cyan: #38bdf8;
-      --emerald: #34d399;
-      --amber: #fbbf24;
+      --bg: #bae4e6;
+      --bg2: #cdeeea;
+      --panel: rgba(248, 254, 254, 0.82);
+      --panel2: rgba(232, 248, 248, 0.90);
+      --border: rgba(25, 84, 88, 0.20);
+      --text: #163638;
+      --muted: #477174;
+      --cyan: #0891b2;
+      --emerald: #16a34a;
+      --amber: #f97316;
       --coral: #fb7185;
-      --violet: #a78bfa;
+      --violet: #2dd4bf;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      background: #060914;
+      background: linear-gradient(155deg, #cbeeea 0%, #aadce2 46%, #b8e7dc 100%);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       line-height: 1.45;
@@ -66,38 +66,42 @@ HTML_PAGE = r"""<!DOCTYPE html>
     }
     .bg-aurora {
       position: fixed;
-      inset: -18%;
+      inset: 0;
       z-index: 0;
       pointer-events: none;
+      overflow: hidden;
+    }
+    .caustic-layer {
+      position: absolute;
+      inset: -14%;
       background:
-        radial-gradient(46% 42% at 20% 20%, rgba(56, 189, 248, 0.25), transparent 70%),
-        radial-gradient(45% 45% at 80% 22%, rgba(167, 139, 250, 0.27), transparent 70%),
-        radial-gradient(48% 44% at 54% 84%, rgba(59, 130, 246, 0.22), transparent 72%),
-        radial-gradient(38% 36% at 15% 78%, rgba(168, 85, 247, 0.19), transparent 70%);
-      filter: blur(42px) saturate(1.2);
-      animation: auroraDrift 20s ease-in-out infinite alternate;
+        radial-gradient(42% 38% at 18% 22%, rgba(255, 255, 255, 0.55), transparent 70%),
+        radial-gradient(40% 40% at 82% 18%, rgba(110, 231, 183, 0.38), transparent 70%),
+        radial-gradient(46% 42% at 55% 85%, rgba(56, 189, 248, 0.28), transparent 72%);
+      filter: blur(34px);
+      animation: lagoonSway 18s ease-in-out infinite alternate;
       will-change: transform;
     }
-    .bg-aurora::after {
-      content: "";
+    .bubble {
       position: absolute;
-      inset: 8%;
-      background:
-        radial-gradient(38% 36% at 70% 35%, rgba(34, 211, 238, 0.16), transparent 68%),
-        radial-gradient(40% 38% at 28% 68%, rgba(124, 58, 237, 0.19), transparent 68%);
-      animation: auroraCounter 26s ease-in-out infinite alternate;
+      bottom: -40px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(165, 243, 252, 0.35) 60%, rgba(255, 255, 255, 0.65));
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      animation: bubbleRise linear infinite;
     }
-    @keyframes auroraDrift {
-      0% { transform: translate3d(-2%, -1.5%, 0) scale(1) rotate(0deg); }
-      50% { transform: translate3d(2.5%, 1.5%, 0) scale(1.06) rotate(3deg); }
-      100% { transform: translate3d(-1.5%, 2.5%, 0) scale(1.03) rotate(-2deg); }
+    @keyframes lagoonSway {
+      0% { transform: translate3d(-2%, -1%, 0) scale(1); }
+      100% { transform: translate3d(2.5%, 2%, 0) scale(1.06); }
     }
-    @keyframes auroraCounter {
-      0% { transform: translate3d(2%, 1%, 0) scale(1.02); }
-      100% { transform: translate3d(-3%, -2%, 0) scale(1.08); }
+    @keyframes bubbleRise {
+      0% { transform: translateY(0) scale(0.85); opacity: 0; }
+      15% { opacity: 0.78; }
+      85% { opacity: 0.6; }
+      100% { transform: translateY(-108vh) scale(1.1); opacity: 0; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .bg-aurora, .bg-aurora::after { animation: none; }
+      .caustic-layer, .bubble { animation: none; }
     }
     .wrap {
       position: relative;
@@ -107,16 +111,16 @@ HTML_PAGE = r"""<!DOCTYPE html>
       padding: 18px 20px 34px;
     }
     .guide-btn {
-      background: rgba(56, 189, 248, 0.14);
-      color: #bae6fd;
-      border-color: rgba(56, 189, 248, 0.36);
+      background: rgba(255, 255, 255, 0.72);
+      color: #0e7490;
+      border-color: rgba(8, 145, 178, 0.35);
     }
-    .guide-btn:hover { background: rgba(56, 189, 248, 0.24); }
+    .guide-btn:hover { background: #ffffff; }
     .onboard-backdrop {
       position: fixed;
       inset: 0;
       z-index: 100;
-      background: rgba(5, 8, 18, 0.78);
+      background: rgba(20, 62, 68, 0.42);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       display: none;
@@ -129,11 +133,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
       width: min(780px, 100%);
       max-height: 90vh;
       overflow-y: auto;
-      background: linear-gradient(155deg, rgba(14, 21, 38, 0.96), rgba(24, 18, 48, 0.95));
-      border: 1px solid rgba(167, 139, 250, 0.38);
-      border-radius: 16px;
+      background: linear-gradient(155deg, rgba(248, 254, 254, 0.96), rgba(226, 247, 243, 0.96));
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: 22px;
       padding: 22px 24px;
-      box-shadow: 0 24px 70px rgba(2, 6, 23, 0.78), 0 0 42px rgba(56, 189, 248, 0.14);
+      color: var(--text);
+      box-shadow: 0 24px 60px rgba(14, 68, 74, 0.26), 0 0 0 1px rgba(25, 84, 88, 0.18);
     }
     .onboard-head {
       display: flex;
@@ -145,12 +150,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
     .onboard-kicker {
       display: inline-block;
       font-size: 0.72rem;
-      font-weight: 700;
+      font-weight: 750;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #7dd3fc;
-      background: rgba(56, 189, 248, 0.14);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #0f766e;
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.34);
       border-radius: 999px;
       padding: 3px 10px;
       margin-bottom: 8px;
@@ -158,10 +163,11 @@ HTML_PAGE = r"""<!DOCTYPE html>
     .onboard-modal h2 {
       margin: 0;
       font-size: 1.3rem;
+      color: #123133;
       letter-spacing: -0.015em;
     }
     .onboard-lead {
-      color: #cbd5e1;
+      color: #365f62;
       font-size: 0.9rem;
       margin: 6px 0 16px;
     }
@@ -175,15 +181,15 @@ HTML_PAGE = r"""<!DOCTYPE html>
       .onboard-grid { grid-template-columns: 1fr; }
     }
     .onboard-step {
-      background: rgba(9, 14, 27, 0.72);
-      border: 1px solid rgba(148, 163, 184, 0.16);
-      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(25, 84, 88, 0.16);
+      border-radius: 14px;
       padding: 12px;
     }
     .onboard-step h3 {
       margin: 0 0 4px;
       font-size: 0.88rem;
-      color: #e0f2fe;
+      color: #0f766e;
     }
     .onboard-step p {
       margin: 0;
@@ -191,12 +197,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
       color: var(--muted);
     }
     .onboard-cmd {
-      background: rgba(8, 13, 25, 0.88);
-      border: 1px solid rgba(56, 189, 248, 0.24);
+      background: rgba(224, 247, 246, 0.9);
+      border: 1px solid rgba(8, 145, 178, 0.24);
       border-radius: 10px;
       padding: 10px 12px;
       font-size: 0.8rem;
-      color: #bae6fd;
+      color: #0e7490;
       margin-bottom: 14px;
       overflow-x: auto;
     }
@@ -207,11 +213,11 @@ HTML_PAGE = r"""<!DOCTYPE html>
       flex-wrap: wrap;
       gap: 10px;
       padding-top: 10px;
-      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      border-top: 1px solid rgba(25, 84, 88, 0.14);
     }
     .onboard-cta {
-      background: linear-gradient(135deg, #38bdf8, #818cf8);
-      color: #06101f;
+      background: linear-gradient(135deg, #22c55e, #06b6d4);
+      color: #ffffff;
       border-color: transparent;
       font-weight: 700;
       padding: 8px 16px;
@@ -227,9 +233,9 @@ HTML_PAGE = r"""<!DOCTYPE html>
     h1 {
       margin: 0;
       font-size: 1.32rem;
-      font-weight: 700;
+      font-weight: 750;
       letter-spacing: -0.015em;
-      background: linear-gradient(90deg, #f8fafc, #38bdf8, #34d399);
+      background: linear-gradient(90deg, #123133, #0e7490, #15803d);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -245,30 +251,40 @@ HTML_PAGE = r"""<!DOCTYPE html>
       gap: 8px;
     }
     select, button {
-      background: var(--panel2);
+      background: rgba(255, 255, 255, 0.80);
       color: var(--text);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 11px;
       padding: 6px 11px;
       font-size: 0.85rem;
       font-family: inherit;
     }
-    button { cursor: pointer; font-weight: 550; }
-    button:hover { border-color: var(--cyan); }
-    button.active {
-      background: rgba(56, 189, 248, 0.16);
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s, background 0.15s, box-shadow 0.18s;
+    }
+    button:hover {
       border-color: var(--cyan);
-      color: #fff;
+      background: #ffffff;
+      transform: translateY(-1.5px);
+      box-shadow: 0 4px 12px rgba(8, 145, 178, 0.14);
+    }
+    button.active {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(6, 182, 212, 0.20));
+      border-color: #0891b2;
+      color: #0f4c5c;
     }
     .pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       font-size: 0.78rem;
+      font-weight: 600;
       padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: var(--panel2);
+      background: rgba(255, 255, 255, 0.78);
       color: var(--muted);
     }
     .dot {
@@ -278,8 +294,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
       background: var(--muted);
     }
     .dot.live {
-      background: var(--emerald);
-      box-shadow: 0 0 8px var(--emerald);
+      background: #16a34a;
+      box-shadow: 0 0 8px rgba(22, 163, 74, 0.65);
       animation: pulse 1.6s infinite;
     }
     @keyframes pulse {
@@ -299,23 +315,28 @@ HTML_PAGE = r"""<!DOCTYPE html>
       .kpis { grid-template-columns: repeat(2, 1fr); }
     }
     .kpi {
-      background: rgba(15, 22, 41, 0.76);
+      background: var(--panel);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      border: 1.5px solid rgba(255, 255, 255, 0.85);
+      border-radius: 16px;
       padding: 11px 13px;
+      box-shadow: 0 8px 22px rgba(17, 75, 82, 0.09), 0 0 0 1px rgba(24, 78, 82, 0.10);
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+    .kpi:hover { transform: translateY(-2px); }
     .kpi-label {
       font-size: 0.74rem;
+      font-weight: 650;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--muted);
     }
     .kpi-val {
       font-size: 1.32rem;
-      font-weight: 700;
+      font-weight: 750;
       margin-top: 2px;
+      color: #123133;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     .kpi-sub {
@@ -328,18 +349,19 @@ HTML_PAGE = r"""<!DOCTYPE html>
       flex-wrap: wrap;
       align-items: center;
       gap: 10px;
-      background: rgba(15, 22, 41, 0.76);
+      background: var(--panel);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--border);
-      border-radius: 12px;
+      border: 1.5px solid rgba(255, 255, 255, 0.85);
+      border-radius: 16px;
       padding: 10px 14px;
       margin-bottom: 14px;
+      box-shadow: 0 8px 22px rgba(17, 75, 82, 0.09), 0 0 0 1px rgba(24, 78, 82, 0.10);
     }
     .scrubber-bar input[type="range"] {
       flex: 1;
       min-width: 220px;
-      accent-color: var(--cyan);
+      accent-color: #0891b2;
     }
     .grid-2 {
       display: grid;
@@ -351,15 +373,15 @@ HTML_PAGE = r"""<!DOCTYPE html>
       .grid-2 { grid-template-columns: 1fr; }
     }
     .card {
-      background: rgba(15, 22, 41, 0.76);
+      background: var(--panel);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
+      border: 1.5px solid rgba(255, 255, 255, 0.85);
+      border-radius: 18px;
+      padding: 15px;
       position: relative;
       overflow: hidden;
-      box-shadow: 0 12px 34px rgba(2, 6, 23, 0.42);
+      box-shadow: 0 10px 28px rgba(17, 75, 82, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 0 0 1px rgba(24, 78, 82, 0.12);
     }
     .card-head {
       display: flex;
@@ -393,9 +415,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
     canvas {
       display: block;
       width: 100%;
-      border-radius: 10px;
-      background: radial-gradient(circle at 50% 45%, rgba(24, 36, 62, 0.55), rgba(7, 10, 18, 0.92));
-      border: 1px solid rgba(36, 53, 86, 0.75);
+      border-radius: 14px;
+      background:
+        radial-gradient(circle at 24% 18%, rgba(125, 211, 252, 0.16), transparent 55%),
+        radial-gradient(circle at 50% 45%, rgba(19, 86, 99, 0.94), rgba(11, 52, 66, 0.98));
+      border: 1.5px solid rgba(255, 255, 255, 0.72);
+      box-shadow: inset 0 2px 16px rgba(6, 36, 46, 0.35), 0 4px 16px rgba(17, 75, 82, 0.12);
     }
     #space-canvas { height: 420px; cursor: grab; }
     #space-canvas:active { cursor: grabbing; }
@@ -407,14 +432,14 @@ HTML_PAGE = r"""<!DOCTYPE html>
       pointer-events: none;
       display: none;
       z-index: 50;
-      background: rgba(8, 12, 22, 0.95);
-      border: 1px solid var(--cyan);
-      border-radius: 8px;
+      background: rgba(248, 254, 254, 0.96);
+      border: 1.5px solid var(--cyan);
+      border-radius: 10px;
       padding: 7px 10px;
       font-size: 0.78rem;
       color: var(--text);
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      box-shadow: 0 10px 26px rgba(14, 68, 74, 0.22);
       max-width: 320px;
       white-space: pre-line;
     }
@@ -433,38 +458,39 @@ HTML_PAGE = r"""<!DOCTYPE html>
     }
     .bar-track {
       height: 10px;
-      background: rgba(255, 255, 255, 0.06);
+      background: rgba(25, 84, 88, 0.10);
       border-radius: 999px;
       overflow: hidden;
     }
     .bar-fill {
       height: 100%;
       border-radius: 999px;
-      background: linear-gradient(90deg, var(--cyan), var(--emerald));
+      background: linear-gradient(90deg, #10b981, #06b6d4);
     }
     .bar-fill.attn {
-      background: linear-gradient(90deg, #60a5fa, #a78bfa);
+      background: linear-gradient(90deg, #fb923c, #0ea5e9);
     }
     .split-bar {
       display: flex;
       height: 14px;
       border-radius: 999px;
       overflow: hidden;
-      background: rgba(255,255,255,0.06);
+      background: rgba(25, 84, 88, 0.10);
       margin: 10px 0 6px;
     }
     .empty-banner {
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px dashed rgba(56, 189, 248, 0.45);
-      border-radius: 10px;
+      background: rgba(232, 249, 247, 0.88);
+      border: 1.5px dashed rgba(8, 145, 178, 0.45);
+      border-radius: 14px;
       padding: 12px 14px;
       margin-bottom: 14px;
       font-size: 0.86rem;
-      color: #cfe8ff;
+      color: #164e63;
       display: none;
     }
     code {
-      background: rgba(255,255,255,0.08);
+      background: rgba(8, 145, 178, 0.10);
+      color: #0e7490;
       padding: 2px 6px;
       border-radius: 5px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -473,7 +499,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <div class="bg-aurora" aria-hidden="true"></div>
+  <div class="bg-aurora" aria-hidden="true">
+    <div class="caustic-layer"></div>
+    <div class="bubble" style="left:12%;width:12px;height:12px;animation-duration:10s;animation-delay:0s;"></div>
+    <div class="bubble" style="left:45%;width:9px;height:9px;animation-duration:8s;animation-delay:1.5s;"></div>
+    <div class="bubble" style="left:78%;width:14px;height:14px;animation-duration:11.5s;animation-delay:2.8s;"></div>
+  </div>
   <div class="onboard-backdrop" id="onboard-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="onboard-modal">
       <div class="onboard-head">
@@ -632,7 +663,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
             <span id="mlp-share-label">MLP (gate/up/down): -</span>
           </div>
           <div class="split-bar">
-            <div id="attn-bar" style="width:50%;background:linear-gradient(90deg,#60a5fa,#a78bfa);"></div>
+            <div id="attn-bar" style="width:50%;background:linear-gradient(90deg,#fb923c,#0ea5e9);"></div>
             <div id="mlp-bar" style="width:50%;background:linear-gradient(90deg,#10b981,#34d399);"></div>
           </div>
         </div>
