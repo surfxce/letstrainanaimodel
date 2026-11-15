@@ -49,6 +49,8 @@ If you already store local weights in `./models/Qwen3-8B-MLX-8bit` and `./models
 Then open `http://127.0.0.1:8765/`.
 
 ### Features
+- **Checkpoint / Step Dropdown** on each pane (`Regular Base Model — Step 0` vs. `[adapters] Step 250 / 2,250 (11%)`, etc.) with hot-swapping across steps
+- **Compare Outputs / Training Visualiser** toggle in a single app (`http://127.0.0.1:8765/`)
 - **Sequential vs Keep Both in RAM vs Stream Both Live**
 - **Undergrad Mode** to test your own answer against the models and dataset reference answer
 - **Save individual** (`./saved_comparisons/comparison_*.md`) or **Save to log** (`./saved_comparisons/comparison_log.md`)

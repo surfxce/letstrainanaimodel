@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import re
 import threading
 import time
 from datetime import datetime
@@ -24,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 import mlx.core as mx
 from mlx_lm import load, stream_generate
 from mlx_lm.sample_utils import make_sampler
+from mlx_lm.tuner.utils import linear_to_lora_layers
 
 from visualizer import HTML_PAGE as VISUALIZER_HTML, read_run_telemetry
 
@@ -415,6 +417,51 @@ HTML_PAGE = r"""<!DOCTYPE html>
       align-items: center;
       gap: 8px;
     }
+    .ckpt-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 6px 8px;
+      background: rgba(15, 22, 41, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 8px;
+    }
+    .ckpt-row label {
+      font-size: 0.74rem;
+      color: var(--muted);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .ckpt-select {
+      flex: 1;
+      min-width: 140px;
+      font-size: 0.8rem;
+      padding: 4px 8px;
+    }
+    .ckpt-progress {
+      width: 68px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.16);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .ckpt-progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #38bdf8, #a78bfa, #34d399);
+      transition: width 0.2s ease;
+    }
+    .ckpt-pct {
+      font-size: 0.74rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #cbd5e1;
+      min-width: 34px;
+      text-align: right;
+    }
     .undergrad-box {
       display: none;
       flex-direction: column;
@@ -589,6 +636,13 @@ HTML_PAGE = r"""<!DOCTYPE html>
             <span class="badge" id="left-status">Idle</span>
           </div>
         </div>
+        <div class="ckpt-row">
+          <label for="left-adapter">Checkpoint</label>
+          <select id="left-adapter" class="ckpt-select"></select>
+          <div class="ckpt-progress" title="Training progress at selected checkpoint"><div class="ckpt-progress-fill" id="left-ckpt-bar"></div></div>
+          <span class="ckpt-pct" id="left-ckpt-pct">0%</span>
+          <button class="small refresh-ckpts-btn" type="button" title="Rescan adapter checkpoints">&#8635;</button>
+        </div>
         <div class="metrics" id="left-metrics"></div>
         <div class="output" id="left-output"></div>
       </div>
@@ -603,6 +657,13 @@ HTML_PAGE = r"""<!DOCTYPE html>
             <button class="small copy-btn" data-side="right" type="button">Copy</button>
             <span class="badge" id="right-status">Idle</span>
           </div>
+        </div>
+        <div class="ckpt-row">
+          <label for="right-adapter">Checkpoint</label>
+          <select id="right-adapter" class="ckpt-select"></select>
+          <div class="ckpt-progress" title="Training progress at selected checkpoint"><div class="ckpt-progress-fill" id="right-ckpt-bar"></div></div>
+          <span class="ckpt-pct" id="right-ckpt-pct">0%</span>
+          <button class="small refresh-ckpts-btn" type="button" title="Rescan adapter checkpoints">&#8635;</button>
         </div>
         <div class="metrics" id="right-metrics"></div>
         <div class="output" id="right-output"></div>
@@ -630,8 +691,12 @@ HTML_PAGE = r"""<!DOCTYPE html>
     const undergradInput = document.getElementById("undergrad-input");
     const saveStatus = document.getElementById("save-status");
     const globalStatus = document.getElementById("global-status");
+    const leftAdapterSel = document.getElementById("left-adapter");
+    const rightAdapterSel = document.getElementById("right-adapter");
 
     let lastMetrics = { left: null, right: null };
+    let checkpoints = [];
+    let arenaCfg = null;
 
     streamBothBox.addEventListener("change", () => {
       if (streamBothBox.checked) simultaneousBox.checked = true;
@@ -710,8 +775,61 @@ HTML_PAGE = r"""<!DOCTYPE html>
       }
     }
 
+    function updateCkptProgress(side) {
+      const sel = side === "left" ? leftAdapterSel : rightAdapterSel;
+      const bar = document.getElementById(side + "-ckpt-bar");
+      const pctEl = document.getElementById(side + "-ckpt-pct");
+      const item = checkpoints.find(c => c.id === sel.value);
+      const pct = item && typeof item.pct === "number" ? item.pct : 0;
+      bar.style.width = pct + "%";
+      pctEl.textContent = pct + "%";
+      if (arenaCfg) {
+        const baseModel = side === "left" ? arenaCfg.left_model : arenaCfg.right_model;
+        document.getElementById(side + "-path").textContent = baseModel + (sel.value ? " + " + sel.value : "");
+      }
+    }
+
+    function populateAdapterSelect(side, modelPath, preferredVal) {
+      const sel = side === "left" ? leftAdapterSel : rightAdapterSel;
+      const prev = preferredVal !== undefined ? preferredVal : sel.value;
+      const modelBase = (modelPath || "").split("/").pop();
+      const compatible = checkpoints.filter(c => {
+        if (!c.id || !c.model) return true;
+        return c.model === modelPath || c.model.split("/").pop() === modelBase;
+      });
+      sel.innerHTML = compatible.map(c => `<option value="${c.id}">${c.label}</option>`).join("");
+      if (compatible.some(c => c.id === prev)) {
+        sel.value = prev;
+      } else if (prev) {
+        const cleanPrev = prev.replace(/^\.\//, "").replace(/\/+$/, "");
+        const matched = compatible.find(c => c.id === `${cleanPrev}/adapters.safetensors`);
+        sel.value = matched ? matched.id : "";
+      } else {
+        sel.value = "";
+      }
+      updateCkptProgress(side);
+    }
+
+    async function refreshCheckpoints(defaultLeft = undefined) {
+      try {
+        const data = await (await fetch("/api/checkpoints")).json();
+        checkpoints = data.checkpoints || [];
+        if (arenaCfg) {
+          populateAdapterSelect("left", arenaCfg.left_model, defaultLeft);
+          populateAdapterSelect("right", arenaCfg.right_model);
+        }
+      } catch {}
+    }
+
+    leftAdapterSel.addEventListener("change", () => updateCkptProgress("left"));
+    rightAdapterSel.addEventListener("change", () => updateCkptProgress("right"));
+    document.querySelectorAll(".refresh-ckpts-btn").forEach(btn => {
+      btn.addEventListener("click", () => refreshCheckpoints());
+    });
+
     async function init() {
       const cfg = await (await fetch("/api/config")).json();
+      arenaCfg = cfg;
       document.getElementById("left-title").textContent = cfg.left_label;
       document.getElementById("left-path").textContent = cfg.left_model + (cfg.adapter_path ? " + " + cfg.adapter_path : "");
       document.getElementById("right-title").textContent = cfg.right_label;
@@ -719,6 +837,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
       document.getElementById("simultaneous").checked = Boolean(cfg.simultaneous);
       document.getElementById("subtitle").textContent =
         `Dataset: ${cfg.prompts_file || "none"} (${cfg.sample_count} samples)`;
+
+      await refreshCheckpoints(cfg.adapter_path || "");
 
       const data = await (await fetch("/api/samples")).json();
       samples = data.samples || [];
@@ -754,6 +874,14 @@ HTML_PAGE = r"""<!DOCTYPE html>
       saveStatus.textContent = "";
     });
 
+    function paneLabelWithCkpt(side) {
+      const base = document.getElementById(side + "-title").textContent;
+      const sel = side === "left" ? leftAdapterSel : rightAdapterSel;
+      if (!sel.value) return base;
+      const opt = sel.options[sel.selectedIndex];
+      return opt ? `${base} (${opt.textContent})` : base;
+    }
+
     async function saveComparison(mode) {
       const payload = {
         mode,
@@ -761,10 +889,10 @@ HTML_PAGE = r"""<!DOCTYPE html>
         system_prompt: systemInput.value.trim(),
         question: promptInput.value.trim(),
         reference_answer: refBody.textContent.trim(),
-        left_label: document.getElementById("left-title").textContent,
+        left_label: paneLabelWithCkpt("left"),
         left_output: document.getElementById("left-output").textContent,
         left_metrics: lastMetrics.left,
-        right_label: document.getElementById("right-title").textContent,
+        right_label: paneLabelWithCkpt("right"),
         right_output: document.getElementById("right-output").textContent,
         right_metrics: lastMetrics.right,
         undergrad_response: undergradInput.value.trim(),
@@ -813,6 +941,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
         thinking: document.getElementById("thinking").checked ? "1" : "0",
         simultaneous: simultaneousBox.checked ? "1" : "0",
         stream_both: streamBothBox.checked ? "1" : "0",
+        left_adapter: leftAdapterSel.value || "",
+        right_adapter: rightAdapterSel.value || "",
       });
 
       const es = new EventSource("/api/stream?" + params.toString());
@@ -929,6 +1059,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
     tabArena.addEventListener("click", () => {
       history.replaceState(null, "", "#compare");
       switchMode("arena");
+      refreshCheckpoints();
     });
     tabViz.addEventListener("click", () => {
       history.replaceState(null, "", "#visualiser");
@@ -995,18 +1126,177 @@ def load_samples(path: str | None) -> list[dict[str, str]]:
     return items
 
 
+STEP_CKPT_RE = re.compile(r"^(\d+)_adapters\.safetensors$")
+
+
+def discover_checkpoints(extra_paths: list[str | None] | None = None) -> list[dict[str, Any]]:
+    """Scan local adapter folders and list checkpoints with training step progress."""
+    results: list[dict[str, Any]] = [
+        {
+            "id": "",
+            "label": "Regular Base Model — Step 0 (Untrained)",
+            "model": "",
+            "step": 0,
+            "total_iters": None,
+            "pct": 0,
+        }
+    ]
+
+    candidate_dirs: list[Path] = []
+    seen_dirs: set[Path] = set()
+    raw_dirs: list[Path] = [Path("./adapters"), Path("./adapters_smoke")]
+    raw_dirs.extend(sorted(Path(".").glob("adapters_*")))
+    for extra in extra_paths or []:
+        if extra:
+            p = Path(extra)
+            raw_dirs.append(p.parent if p.is_file() else p)
+
+    for d in raw_dirs:
+        if not d.exists() or not d.is_dir():
+            continue
+        res = d.resolve()
+        if res not in seen_dirs:
+            seen_dirs.add(res)
+            candidate_dirs.append(d)
+
+    for d in candidate_dirs:
+        cfg_file = d / "adapter_config.json"
+        if not cfg_file.exists():
+            continue
+        try:
+            cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+        except Exception:
+            cfg = {}
+        total_iters = cfg.get("iters") if isinstance(cfg.get("iters"), int) and cfg.get("iters") > 0 else None
+        model_hint = str(cfg.get("model") or "")
+
+        step_files: list[tuple[int, Path]] = []
+        for f in d.iterdir():
+            if not f.is_file():
+                continue
+            m = STEP_CKPT_RE.match(f.name)
+            if m:
+                step_files.append((int(m.group(1)), f))
+        step_files.sort(key=lambda x: x[0])
+
+        for step, f in step_files:
+            if total_iters:
+                pct = min(100, round((step / total_iters) * 100))
+                label = f"[{d.name}] Step {step:,} / {total_iters:,} ({pct}%)"
+            else:
+                pct = 100
+                label = f"[{d.name}] Step {step:,}"
+            results.append(
+                {
+                    "id": str(f),
+                    "label": label,
+                    "model": model_hint,
+                    "step": step,
+                    "total_iters": total_iters,
+                    "pct": pct,
+                }
+            )
+
+        latest_file = d / "adapters.safetensors"
+        if latest_file.exists():
+            last_step = step_files[-1][0] if step_files else total_iters
+            if total_iters and last_step and last_step >= total_iters:
+                lbl = f"[{d.name}] Final / Latest — Step {total_iters:,} / {total_iters:,} (100%)"
+                pct_val = 100
+            elif total_iters and last_step:
+                pct_val = min(100, round((last_step / total_iters) * 100))
+                lbl = f"[{d.name}] Latest saved — Step {last_step:,} / {total_iters:,} ({pct_val}%)"
+            else:
+                pct_val = 100
+                lbl = f"[{d.name}] Latest (adapters.safetensors)"
+            results.append(
+                {
+                    "id": str(latest_file),
+                    "label": lbl,
+                    "model": model_hint,
+                    "step": last_step,
+                    "total_iters": total_iters,
+                    "pct": pct_val,
+                }
+            )
+
+    return results
+
+
 class ModelManager:
-    """Manages loading and unloading MLX models safely under a lock."""
+    """Manages loading, unloading, and hot-swapping LoRA checkpoints safely under a lock."""
 
     def __init__(self, left_spec: dict[str, Any], right_spec: dict[str, Any]) -> None:
         self.lock = threading.Lock()
         self.specs = {"left": left_spec, "right": right_spec}
-        self.loaded: dict[str, tuple[Any, Any]] = {}
+        self.loaded: dict[str, tuple[Any, Any, str | None, str | None]] = {}
 
-    def get_model(self, side: str, keep_both: bool) -> tuple[Any, Any, float]:
+    @staticmethod
+    def _normalize_adapter(adapter_spec: str | None) -> tuple[str | None, str | None]:
+        if not adapter_spec:
+            return None, None
+        p = Path(adapter_spec)
+        if p.is_dir():
+            latest = p / "adapters.safetensors"
+            target = str(latest.resolve()) if latest.exists() else str(p.resolve())
+            return target, str(p.resolve())
+        return str(p.resolve()), str(p.parent.resolve())
+
+    def _load_fresh(self, model_path: str, adapter_spec: str | None) -> tuple[Any, Any, str | None]:
+        if not adapter_spec:
+            model, tokenizer = load(model_path)
+            return model, tokenizer, None
+        p = Path(adapter_spec)
+        if p.is_dir():
+            model, tokenizer = load(model_path, adapter_path=str(p))
+            return model, tokenizer, str(p.resolve())
+
+        cfg_path = p.parent / "adapter_config.json"
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        fine_tune_type = cfg.get("fine_tune_type", "lora")
+        model, tokenizer = load(model_path)
+        if fine_tune_type != "full":
+            linear_to_lora_layers(
+                model,
+                cfg["num_layers"],
+                cfg["lora_parameters"],
+                use_dora=(fine_tune_type == "dora"),
+            )
+        weights = mx.load(str(p))
+        model.load_weights(list(weights.items()), strict=False)
+        mx.eval(model.parameters())
+        return model, tokenizer, str(p.parent.resolve())
+
+    def get_model(
+        self,
+        side: str,
+        keep_both: bool,
+        adapter_spec: str | None = None,
+    ) -> tuple[Any, Any, float]:
+        req_adapter, req_cfg_dir = self._normalize_adapter(adapter_spec)
+
         if side in self.loaded:
-            model, tokenizer = self.loaded[side]
-            return model, tokenizer, 0.0
+            model, tokenizer, active_adapter, active_cfg_dir = self.loaded[side]
+            if active_adapter == req_adapter:
+                return model, tokenizer, 0.0
+            # Fast hot-swap when staying on LoRA checkpoints from the same adapter folder
+            if (
+                req_adapter
+                and req_cfg_dir
+                and active_cfg_dir == req_cfg_dir
+                and Path(req_adapter).is_file()
+            ):
+                t0 = time.perf_counter()
+                weights = mx.load(req_adapter)
+                model.load_weights(list(weights.items()), strict=False)
+                mx.eval(model.parameters())
+                dt = round(time.perf_counter() - t0, 2)
+                self.loaded[side] = (model, tokenizer, req_adapter, req_cfg_dir)
+                return model, tokenizer, dt
+            # Base <-> LoRA or cross-folder change requires clean base reload
+            del self.loaded[side]
+            gc.collect()
+            mx.clear_cache()
 
         if not keep_both:
             other = "right" if side == "left" else "left"
@@ -1017,9 +1307,9 @@ class ModelManager:
 
         spec = self.specs[side]
         t0 = time.perf_counter()
-        model, tokenizer = load(spec["model_path"], adapter_path=spec.get("adapter_path"))
+        model, tokenizer, cfg_dir = self._load_fresh(spec["model_path"], adapter_spec)
         load_time_s = round(time.perf_counter() - t0, 2)
-        self.loaded[side] = (model, tokenizer)
+        self.loaded[side] = (model, tokenizer, req_adapter, cfg_dir)
         return model, tokenizer, load_time_s
 
 
@@ -1191,6 +1481,11 @@ def make_handler(
                 self._send_json({"samples": samples})
                 return
 
+            if parsed.path == "/api/checkpoints":
+                extra = [config_payload.get("adapter_path")]
+                self._send_json({"checkpoints": discover_checkpoints(extra)})
+                return
+
             if parsed.path == "/api/stream":
                 qs = parse_qs(parsed.query)
                 user_prompt = qs.get("prompt", [""])[0]
@@ -1200,6 +1495,19 @@ def make_handler(
                 thinking = qs.get("thinking", ["0"])[0] == "1"
                 stream_both = qs.get("stream_both", ["0"])[0] == "1"
                 simultaneous = (qs.get("simultaneous", ["0"])[0] == "1") or stream_both
+
+                allowed_ckpts = {
+                    c["id"]: c["id"]
+                    for c in discover_checkpoints([config_payload.get("adapter_path")])
+                    if c.get("id")
+                }
+                cli_left = config_payload.get("adapter_path")
+                if cli_left:
+                    allowed_ckpts[cli_left] = cli_left
+                req_adapters = {
+                    "left": allowed_ckpts.get(qs.get("left_adapter", [""])[0], None),
+                    "right": allowed_ckpts.get(qs.get("right_adapter", [""])[0], None),
+                }
 
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -1221,7 +1529,9 @@ def make_handler(
                                 for side in ("left", "right"):
                                     try:
                                         self._send_sse("status", {"side": side, "text": "Loading model..."})
-                                        model, tokenizer, load_time_s = manager.get_model(side, True)
+                                        model, tokenizer, load_time_s = manager.get_model(
+                                            side, True, adapter_spec=req_adapters[side]
+                                        )
                                         load_times[side] = load_time_s
                                         formatted = format_chat_prompt(
                                             tokenizer, user_prompt, system_prompt, thinking
@@ -1268,7 +1578,9 @@ def make_handler(
                             for side in ("left", "right"):
                                 try:
                                     self._send_sse("status", {"side": side, "text": "Loading model..."})
-                                    model, tokenizer, load_time_s = manager.get_model(side, simultaneous)
+                                    model, tokenizer, load_time_s = manager.get_model(
+                                        side, simultaneous, adapter_spec=req_adapters[side]
+                                    )
                                     self._send_sse("status", {"side": side, "text": "Generating..."})
 
                                     formatted = format_chat_prompt(
